@@ -14,6 +14,8 @@
  *   VITE_GOOGLE_CLIENT_ID  -> Google OAuth client id (real Google sign-in)
  */
 
+import { API_URL } from '../config';
+
 export type ApiMode = 'mock' | 'real';
 
 export interface MockLatencyOptions {
@@ -49,11 +51,17 @@ export interface ApiConfig {
 }
 
 export const apiConfig: ApiConfig = {
-  mode: parseMode(import.meta.env.VITE_API_MODE as string | undefined),
-  baseUrl: (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, '') ?? 'http://localhost:8000/api',
-  mockLatency: parseMockLatency(import.meta.env.VITE_MOCK_LATENCY as string | undefined),
-  googleClientId: (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() ?? '',
+  mode: parseMode(import.meta.env.VITE_API_MODE),
+  baseUrl: API_URL?.trim().replace(/\/+$/, '') ?? '',
+  mockLatency: parseMockLatency(import.meta.env.VITE_MOCK_LATENCY),
+  googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '',
 };
 
 /** True when the real HTTP client stack is active. */
 export const isRealApi = apiConfig.mode === 'real';
+
+if (import.meta.env.DEV && isRealApi && !apiConfig.baseUrl) {
+  console.error(
+    '[api] VITE_API_URL is missing. Set it in your local .env file before using real API mode.',
+  );
+}

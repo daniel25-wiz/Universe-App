@@ -341,19 +341,15 @@ npm run lint
 
 ### Environment Variables
 
-Create a `.env` file in the root directory:
+Copy `.env.example` to `.env` in the frontend root and set `VITE_API_URL` to your backend URL:
 
 ```env
 # API Configuration
-VITE_API_MODE=mock                    # "mock" or "real"
-VITE_API_URL=http://localhost:8000/api # Backend URL (only used in "real" mode)
-
-# Mock API Settings
-VITE_MOCK_LATENCY=                    # Set to "off" to disable mock latency
-
-# Google OAuth (optional)
-VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+VITE_API_URL=http://localhost:8000/api
+VITE_API_MODE=real
 ```
+
+Restart `npm run dev` after changing environment variables. `.env` files are ignored by Git; values prefixed with `VITE_` are included in browser code and must not contain secrets.
 
 ### Key Architectural Patterns
 
@@ -1082,6 +1078,8 @@ npm install -g vercel
 vercel --prod
 ```
 
+In Vercel, open the project’s **Settings → Environment Variables**, add `VITE_API_URL` with the deployed backend’s base URL (including `/api` if required), and select the environments where it should apply. Set `VITE_API_MODE=real` as well. Redeploy after saving; Vite reads these values during the production build. `VITE_` variables are public in the client bundle, so do not store credentials or private keys in them.
+
 **Netlify**:
 ```bash
 npm install -g netlify-cli
@@ -1212,7 +1210,7 @@ volumes:
 
 ### Environment Variables (Production)
 
-**Frontend (`.env.production`)**:
+**Frontend (local `.env.production`, or Vercel Project Settings → Environment Variables)**:
 ```env
 VITE_API_MODE=real
 VITE_API_URL=https://api.yourdomain.com/api

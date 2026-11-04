@@ -23,9 +23,9 @@ implementations both satisfy the same TypeScript interfaces.
 
 ## Base URL
 
-```
-VITE_API_URL (default: http://localhost:8000/api)
-```
+Set `VITE_API_URL` to the backend base URL (for local development, the example
+in `.env.example` uses `http://localhost:8000/api`). There is no built-in
+fallback; real API mode requires this value.
 
 ## Conventions
 

@@ -245,6 +245,13 @@ export class HttpClient {
 
   async request<T>(options: HttpClientOptions): Promise<T> {
     const { method, path, body, rawBody, skipAuth } = options;
+    if (!this.baseUrl) {
+      throw new ApiError({
+        message: 'VITE_API_URL is not configured. Set it in your local .env file or in Vercel project settings.',
+        status: 0,
+        code: 'NETWORK_ERROR',
+      });
+    }
     logApi(method, path);
 
     const buildInit = (): RequestInit => {
