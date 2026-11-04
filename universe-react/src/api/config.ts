@@ -6,8 +6,8 @@
  * backend is a config-only change — no React component/hook code needs to be
  * edited:
  *
+ *   VITE_API_MODE=real   -> all services resolve to the HTTP-based implementations (default)
  *   VITE_API_MODE=mock   -> all services resolve to the Mock*Api implementations
- *   VITE_API_MODE=real   -> all services resolve to the HTTP-based implementations
  *
  *   VITE_API_URL           -> base URL used only by the real HTTP client
  *   VITE_MOCK_LATENCY      -> "off" disables the artificial network delay
@@ -27,7 +27,7 @@ export interface MockLatencyOptions {
 }
 
 function parseMode(value: string | undefined): ApiMode {
-  return value === 'real' ? 'real' : 'mock';
+  return value === 'mock' ? 'mock' : 'real';
 }
 
 function parseMockLatency(value: string | undefined): MockLatencyOptions {
