@@ -142,7 +142,10 @@ SIMPLE_JWT = {
 }
 
 # ------------------------------------------------------------------- CORS
-CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "https://universemarketplace.vercel.app", "https://universe-backend-ccho.onrender.com")
+CORS_ALLOWED_ORIGINS = env_list(
+    "CORS_ALLOWED_ORIGINS",
+    "https://universemarketplace.vercel.app,https://universe-backend-ccho.onrender.com",
+)
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
