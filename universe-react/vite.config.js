@@ -24,6 +24,6 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['from-bonfire-aloft.ngrok-free.dev'],
+    allowedHosts: ['universe-backend-ccho.onrender.com'],
   },
 })
