@@ -55,8 +55,9 @@ To use PostgreSQL instead, set `DATABASE_URL` in `.env`, e.g.
   webhook endpoint (`POST /payments/webhook`) that listens for `charge.success` server-to-server,
   so a payment still gets recorded if the buyer closes the tab before returning. Ask me to add it
   once you're ready to deploy — it needs your Paystack webhook secret to verify the signature.
-- **Image uploads** are stored locally under `/media`. Fine for development; for production, swap
-  `uploads/views.py` for `django-storages` + S3 (or similar) — say the word and I'll wire it up.
+- **Image uploads** use Cloudinary through Django's default storage backend. Set
+  `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in `.env`
+  (or the deployment environment); the upload endpoint returns the Cloudinary URL.
 - **`docs/API_CONTRACT.md`** was referenced in your code comments but wasn't in the files you sent —
   if you have it, send it and I'll reconcile any field names I had to guess (e.g. exact
   `field_errors` key names, the seller-profile response fields for logged-out visitors).

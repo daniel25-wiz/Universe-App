@@ -47,6 +47,9 @@ class ProductSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Price must be greater than zero.")
         return value
 
+    def validate_variants(self, value):
+        return value or []
+
     def validate(self, attrs):
         price = attrs.get("price", getattr(self.instance, "price", None))
         sale = attrs.get("sale_price", getattr(self.instance, "sale_price", None))

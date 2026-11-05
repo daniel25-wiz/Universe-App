@@ -2,6 +2,7 @@ import os
 import uuid
 
 from django.conf import settings
+from django.core.files.storage import default_storage
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,14 +26,7 @@ class UploadImageView(APIView):
         if file_obj.size > settings.MAX_UPLOAD_BYTES:
             raise ApiError("Image must be smaller than 5MB.", code="FILE_TOO_LARGE", status_code=400)
 
-        subdir = "uploads"
-        os.makedirs(os.path.join(settings.MEDIA_ROOT, subdir), exist_ok=True)
-        filename = f"{uuid.uuid4().hex}{ext}"
-        rel_path = os.path.join(subdir, filename)
-        abs_path = os.path.join(settings.MEDIA_ROOT, rel_path)
-        with open(abs_path, "wb") as dest:
-            for chunk in file_obj.chunks():
-                dest.write(chunk)
-
-        url = f"{settings.PUBLIC_BASE_URL}{settings.MEDIA_URL}{rel_path}".replace(os.sep, "/")
+        filename = f"uploads/{uuid.uuid4().hex}{ext}"
+        saved_name = default_storage.save(filename, file_obj)
+        url = default_storage.url(saved_name)
         return Response({"url": url, "name": file_obj.name, "size": file_obj.size}, status=201)
