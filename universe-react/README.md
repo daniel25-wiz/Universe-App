@@ -1019,7 +1019,7 @@ rejected exactly like it would be against a real server.
 3. Enable **Google+ API**
 4. Go to **Credentials** → **Create Credentials** → **OAuth client ID**
 5. Choose **Web application**
-6. Add **Authorized JavaScript origins**:
+6. Add **Authorized JavaScript origins**, including the exact origin where the frontend is deployed (scheme, hostname, and port only; no path):
    ```
    http://localhost:5173
    https://yourdomain.com
@@ -1078,7 +1078,7 @@ npm install -g vercel
 vercel --prod
 ```
 
-In Vercel, open the project’s **Settings → Environment Variables**, add `VITE_API_URL` with the deployed backend’s base URL (including `/api` if required), and select the environments where it should apply. Set `VITE_API_MODE=real` as well. Redeploy after saving; Vite reads these values during the production build. `VITE_` variables are public in the client bundle, so do not store credentials or private keys in them.
+In Vercel, open the project’s **Settings → Environment Variables**, add `VITE_API_URL` with the deployed backend’s base URL (the app adds `/api` when it is omitted), and select the environments where it should apply. Set `VITE_API_MODE=real` as well. Redeploy after saving; Vite reads these values during the production build. `VITE_` variables are public in the client bundle, so do not store credentials or private keys in them.
 
 **Netlify**:
 ```bash

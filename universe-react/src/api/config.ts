@@ -38,6 +38,12 @@ function parseMockLatency(value: string | undefined): MockLatencyOptions {
   return { enabled: true, min: 300, max: 800 };
 }
 
+function normalizeApiBaseUrl(value: string | undefined): string {
+  const baseUrl = value?.trim().replace(/\/+$/, '') ?? '';
+  if (!baseUrl || baseUrl.endsWith('/api')) return baseUrl;
+  return `${baseUrl}/api`;
+}
+
 export interface ApiConfig {
   mode: ApiMode;
   baseUrl: string;
@@ -52,7 +58,7 @@ export interface ApiConfig {
 
 export const apiConfig: ApiConfig = {
   mode: parseMode(import.meta.env.VITE_API_MODE),
-  baseUrl: API_URL?.trim().replace(/\/+$/, '') ?? '',
+  baseUrl: normalizeApiBaseUrl(API_URL),
   mockLatency: parseMockLatency(import.meta.env.VITE_MOCK_LATENCY),
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() ?? '',
 };
