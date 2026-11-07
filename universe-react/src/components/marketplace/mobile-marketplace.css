@@ -96,6 +96,13 @@
 .mm-add-cart:active { transform: scale(.97); }
 .mm-add-cart:focus-visible { outline: 2px solid var(--mm-blue-dark); outline-offset: 2px; }
 .mm-discover { padding-top: 0; }
+/* "Back to dashboard" pill — sits on the right of the heading row, rendered
+   only for signed-in sellers. Uses the same pill treatment as the category
+   chips so it reads as native chrome. */
+.mm-seller-back { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid #e2e8f0; border-radius: 999px; color: var(--mm-blue); background: white; font: inherit; font-size: 12px; font-weight: 600; text-decoration: none; box-shadow: 0 2px 8px rgb(0 0 0 / 4%); transition: border-color .2s ease, background .2s ease; }
+.mm-seller-back .mm-icon { width: 15px; height: 15px; stroke-width: 2.2; }
+.mm-seller-back:hover { border-color: var(--mm-blue); }
+.mm-seller-back:focus-visible { outline: 2px solid var(--mm-blue-dark); outline-offset: 2px; }
 .mm-discover-heading { display: flex; align-items: center; justify-content: space-between; padding: 2px 5px 10px; }
 .mm-discover-heading h1 { margin: 0; font-size: 27px; letter-spacing: -.04em; }
 .mm-search-row { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }

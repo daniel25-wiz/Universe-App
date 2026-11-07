@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { useCurrentUser } from '../../../hooks/useAuth';
 import { useInfiniteProducts } from '../../../hooks/useProducts';
 import {
   Icon,
@@ -26,6 +27,7 @@ const PAGE_SIZE = 40;
 function PublicMarketplace({ cartItems = [], savedProducts = [], onToggleSaved, onAddToCart }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: user } = useCurrentUser();
   const [activeCategory, setActiveCategory] = useState('All');
   const [search, setSearch] = useState('');
   const [activeBanner, setActiveBanner] = useState(0);
@@ -114,9 +116,23 @@ function PublicMarketplace({ cartItems = [], savedProducts = [], onToggleSaved, 
     return () => observer.disconnect();
   }, [displayProducts.length, hasNextPage, isLoading, fetchNextPage]);
 
+  // Sellers browsing the public marketplace get a quick way back into the
+  // dashboard (buyers and guests never see this row). Linking instead of
+  // navigate(-1) makes the destination predictable no matter how the seller
+  // reached the marketplace.
+  const isSeller = user?.accountType === 'seller';
+
   return <MobileFrame active="home" cartCount={cartItems.reduce((total, item) => total + item.quantity, 0)}>
     <main className="mm-scroll mm-discover">
-      <section className="mm-discover-heading"><h1>Discover</h1></section>
+      <section className="mm-discover-heading">
+        <h1>Discover</h1>
+        {isSeller && (
+          <Link to="/seller" className="mm-seller-back">
+            <Icon name="arrowBack" />
+            <span>Back to dashboard</span>
+          </Link>
+        )}
+      </section>
       <form className="mm-search-row" onSubmit={submitSearch}><label><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search for product" /></label><button type="submit" aria-label="Search products" className="mm-filter"><Icon name="search" /></button></form>
       <section className="mm-banner-carousel" aria-label="Marketplace promotions"><div className="mm-banner-track" ref={bannerRef}>{MARKETPLACE_BANNERS.map((banner, index) => <img key={banner} src={banner} className="mm-banner-slide" alt={`Marketplace promotion ${index + 1}`} />)}</div><div className="mm-banner-dots" aria-hidden="true">{MARKETPLACE_BANNERS.map((banner, index) => <button type="button" key={banner} className={activeBanner === index ? 'active' : ''} aria-label={`Show promotion ${index + 1}`} onClick={() => setActiveBanner(index)} />)}</div></section>
       <section className="mm-categories"><div><h2>Categories</h2><button type="button">See all</button></div><div className="mm-category-scroll">{CATEGORIES.map((category) => <button type="button" key={category} className={activeCategory === category ? 'active' : ''} onClick={() => setActiveCategory(category)}>{category}</button>)}</div></section>
