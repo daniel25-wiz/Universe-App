@@ -97,6 +97,46 @@
   max-width: 620px;
 }
 
+/* "Back to workshop" pill — sits above the title inside the blue header so
+   the seller can always leave the form without scrolling to the footer. */
+.ap-back {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.ap-back .material-symbols-outlined {
+  font-size: 1.15rem;
+}
+
+.ap-back:hover {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.ap-back:active {
+  transform: translateY(1px);
+}
+
+.ap-back:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
 .ap-form {
   padding: 20px 30px 10px;
   background: #f4f7fb;
@@ -960,5 +1000,10 @@
 
   .ap-card {
     border-radius: 20px;
+  }
+
+  .ap-back {
+    margin-bottom: 14px;
+    font-size: 0.86rem;
   }
 }

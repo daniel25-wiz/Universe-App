@@ -126,6 +126,29 @@ function AddProductPage() {
   });
 
   const goBack = () => navigate('/seller/marketplace');
+
+  /** Reset the form to its initial state without leaving the page. */
+  const clearForm = () => {
+    if (isSubmitting) return;
+    setServerError(null);
+    setImageError(null);
+    setForm({
+      name: '',
+      sku: '',
+      description: '',
+      price: '',
+      discount: '',
+      length: '',
+      stock: '',
+      category: '',
+      status: 'active',
+      featuredInMarketplace: canAddListing,
+      soldOut: false,
+      brand: 'Brand New',
+      images: [],
+      variants: [createVariant()],
+    });
+  };
   const imageSlots = Array.from({ length: MAX_IMAGES }, (_, index) => form.images[index] ?? null);
 
   // Clean up object URLs when component unmounts or images change
@@ -406,6 +429,15 @@ function AddProductPage() {
 
       <div className="ap-card">
         <header className="ap-header">
+          {/*
+            Explicit way back to My Workshop. Uses a fixed destination instead
+            of navigate(-1) so the result is predictable no matter how the
+            seller reached this page (sidebar, "Add Product" button, deep link).
+          */}
+          <button type="button" className="ap-back" onClick={goBack}>
+            <MaterialIcon name="arrow_back" />
+            <span>Back to workshop</span>
+          </button>
           <h1 className="ap-title">Add New Product</h1>
           <p className="ap-subtitle">
             Fill in the details below to add a new product
@@ -793,7 +825,12 @@ function AddProductPage() {
         </form>
 
         <div className="ap-action-bar">
-          <button type="button" className="ap-clear-btn" onClick={goBack}>
+          <button
+            type="button"
+            className="ap-clear-btn"
+            onClick={clearForm}
+            disabled={isSubmitting}
+          >
             <MaterialIcon name="delete" />
             Clear Product
           </button>
