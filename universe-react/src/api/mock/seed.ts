@@ -19,6 +19,10 @@ const earlier = '2026-09-04T10:00:00.000Z';
 // buckets have real rows to aggregate in mock mode.
 const daysAgo2 = '2026-09-03T10:00:00.000Z';
 const weeksAgo4 = '2026-08-25T14:00:00.000Z';
+// A fresh pending order so the seller dashboard demonstrates the
+// order-confirmation notification out of the box (timestamp is relative so it
+// always reads as "a few minutes ago" when the mock DB is seeded).
+const minutesAgo20 = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
 const users: (User & { passwordHash: string; failedLoginCount: number; lockedUntil: null })[] = [
   {
@@ -167,6 +171,9 @@ const products: Product[] = [
  * catalog rows (prices the seller actually set) and every order's `amount`
  * equals the sum of its line totals, so Sales Analytics aggregates exactly
  * like it will against the real Django API.
+ *
+ * Every seeded order is already seller-confirmed EXCEPT order-4, which is
+ * `pending` so the dashboard's confirmation dropdown has something to show.
  */
 const orders: Order[] = [
   {
@@ -176,6 +183,7 @@ const orders: Order[] = [
     buyerInitials: 'JD',
     amount: 232485,
     status: 'processing',
+    confirmation: 'confirmed',
     createdAt: now,
     items: [
       { productId: uuid('prod-1'), productName: 'Premium Wireless Headphones', quantity: 1, unitPrice: 232485, lineTotal: 232485, sellerId: uuid('user-1') },
@@ -188,6 +196,7 @@ const orders: Order[] = [
     buyerInitials: 'SM',
     amount: 96100,
     status: 'shipped',
+    confirmation: 'confirmed',
     createdAt: daysAgo2,
     items: [
       { productId: uuid('prod-2'), productName: 'Minimalist Ceramic Mug', quantity: 1, unitPrice: 37200, lineTotal: 37200, sellerId: uuid('user-1') },
@@ -201,10 +210,26 @@ const orders: Order[] = [
     buyerInitials: 'AK',
     amount: 523870,
     status: 'delivered',
+    confirmation: 'confirmed',
     createdAt: weeksAgo4,
     items: [
       { productId: uuid('prod-1'), productName: 'Premium Wireless Headphones', quantity: 2, unitPrice: 232485, lineTotal: 464970, sellerId: uuid('user-1') },
       { productId: uuid('prod-3'), productName: 'Classic Leather Wallet', quantity: 1, unitPrice: 58900, lineTotal: 58900, sellerId: uuid('user-1') },
+    ],
+  },
+  {
+    id: uuid('order-4'),
+    reference: 'GS-2042',
+    buyerName: 'Chidera Nwosu',
+    buyerInitials: 'CN',
+    amount: 74400,
+    status: 'pending',
+    // Awaiting the seller's confirmation: NOT counted toward revenue until
+    // they press "Confirm order" in the dashboard notification dropdown.
+    confirmation: 'pending',
+    createdAt: minutesAgo20,
+    items: [
+      { productId: uuid('prod-2'), productName: 'Minimalist Ceramic Mug', quantity: 2, unitPrice: 37200, lineTotal: 74400, sellerId: uuid('user-1') },
     ],
   },
 ];

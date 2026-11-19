@@ -78,6 +78,7 @@ const SavedItemsPage = lazy(() => import('./components/marketplace/SavedItemsPag
 const MarketplaceSearchPage = lazy(() => import('./components/marketplace/MarketplaceSearchPage'));
 const BuyerProfile = lazy(() => import('./components/marketplace/BuyerProfile'));
 const SalesAnalytics = lazy(() => import('./components/seller-dashboard/views/SalesAnalytics'));
+const SellerNotificationsPage = lazy(() => import('./components/seller-dashboard/views/SellerNotificationsPage'));
 const SellerProfile = lazy(() => import('./components/seller-dashboard/views/SellerProfile'));
 const SellerSettings = lazy(() => import('./components/seller-dashboard/views/SellerSettings'));
 const SellerStoreLink = lazy(() => import('./components/seller-dashboard/views/SellerStoreLink'));
@@ -381,6 +382,14 @@ function App() {
             element={
               <DashboardView>
                 <SalesAnalytics />
+              </DashboardView>
+            }
+          />
+          <Route
+            path="notifications"
+            element={
+              <DashboardView>
+                <SellerNotificationsPage />
               </DashboardView>
             }
           />

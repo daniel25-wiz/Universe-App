@@ -71,6 +71,8 @@ A few other things worth knowing:
 - **Multi-Image Gallery** — upload up to 5 images per product
 - **Product Variants** — define size, color, or custom options (up to 10 variant groups)
 - **Sales Analytics** — real-time insights with comparison to previous periods
+- **Order Confirmation** — a new buyer order does **not** count toward revenue or products sold until the seller confirms it was actually made
+- **Notification Centre** — the dashboard bell previews pending orders one at a time (with previous/next arrows when several are waiting) and links to `/seller/notifications`, which lists new order requests alongside previews of previous orders
 - **Seller Profile** — customizable store information and branding
 - **Featured Products** — showcase up to 2 products in the public marketplace
 - **Account Settings** — manage profile, password, and account preferences
@@ -78,6 +80,7 @@ A few other things worth knowing:
 ### Platform Features
 - **Dual Authentication** — email/password and Google OAuth 2.0
 - **Responsive Design** — mobile-first, works on all devices
+- **Mobile-Safe Cart** — the cart and its "Ordered products" summary stay inside the viewport on phones; long product names truncate with an ellipsis instead of widening the page
 - **Boot Skeletons** — instant perceived performance with CSS-only loading states
 - **Accessibility** — WCAG 2.1 compliant with keyboard navigation
 - **Code Splitting** — route-based lazy loading for optimal performance
@@ -274,11 +277,13 @@ universe-react/
 │   │   │   │   ├── MyMarketplace.jsx
 │   │   │   │   ├── PublicMarketplace.jsx
 │   │   │   │   ├── SalesAnalytics.jsx
+│   │   │   │   ├── SellerNotificationsPage.jsx
 │   │   │   │   ├── SellerProfile.jsx
 │   │   │   │   └── SellerSettings.jsx
 │   │   │   └── ui/                   # Dashboard UI components
 │   │   │       ├── AddProductPage.jsx
-│   │   │       └── EditProductPage.jsx
+│   │   │       ├── EditProductPage.jsx
+│   │   │       └── SellerNotifications.jsx  # Bell + pending-order carousel
 │   │   │
 │   │   ├── seller-onboarding/        # Seller onboarding flow
 │   │   └── skeletons/                # Loading skeletons
@@ -291,6 +296,7 @@ universe-react/
 │   │   ├── useProducts.ts            # Products hooks
 │   │   ├── useUser.ts                # User management hooks
 │   │   ├── useOrders.ts              # Orders hooks
+│   │   ├── useSellerAnalytics.ts     # Sales analytics + order confirmation + notifications
 │   │   ├── usePayments.ts            # Payments hooks
 │   │   └── useStorefront.ts          # Storefront hooks
 │   │
@@ -703,6 +709,70 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
 - [ ] Results are ordered consistently (e.g., newest first)
 - [ ] Response time is acceptable (< 200ms typical)
 
+#### 6. **Order Confirmation & Seller Notifications**
+
+A buyer order must **not** count toward the seller's revenue or products sold
+until the seller confirms it was actually made. The frontend implements this
+against two endpoints only (see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
+→ Orders):
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/seller/orders?confirmation=pending&page=1&pageSize=50` | Orders waiting for confirmation (bell) |
+| `POST /api/seller/orders/:id/confirm` | Confirm an order (it then counts toward revenue) |
+
+**Rules the backend must honour:**
+
+- `POST /api/orders` creates the order with `confirmation: "pending"` and
+  returns it. Orders created before this feature (no `confirmation` field) are
+  treated as confirmed so legacy figures stay correct.
+- `GET /api/seller/orders` supports:
+  - `confirmation=pending` / `confirmation=confirmed` filtering.
+  - `page` / `pageSize` (the notifications page requests `pageSize=50`).
+  - Optional `since` / `until` (ISO 8601) bounding `createdAt` for analytics.
+  - Newest-first ordering (`createdAt DESC`).
+  - `items[]` on every order (`productId`, `productName`, `quantity`,
+    `unitPrice`, `lineTotal`, `sellerId`) plus `reference`, `buyerName` and
+    `confirmation`, so multi-seller orders stay attributable per line.
+- `POST /api/seller/orders/:id/confirm` sets `confirmation: "confirmed"` and
+  `confirmedAt`, and returns the updated order. It is idempotent (confirming an
+  already-confirmed order returns 200) and returns 404 when the order has no
+  line item owned by the signed-in seller.
+- Pending orders still count in the Orders total and the recent-orders list;
+  only revenue, products sold, the revenue chart and refunds exclude them.
+
+The notification bell polls `confirmation=pending`, previews one order at a
+time (with previous/next arrow buttons and a "1 of M" counter when several are
+waiting), and confirms inline. The `/seller/notifications` page loads
+`GET /api/seller/orders?page=1&pageSize=50` with **no date window** and groups
+the result into **New order requests** and **Previous orders**. Both views share
+one query cache, so a confirmation updates them together. No separate
+notifications, unread-count or websocket endpoint is required.
+
+**Django model addition:**
+
+```python
+class Order(models.Model):
+    ...
+    confirmation = models.CharField(
+        max_length=10,
+        choices=[('pending', 'Pending'), ('confirmed', 'Confirmed')],
+        default='pending',
+        db_index=True,
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+```
+
+**Order confirmation testing checklist:**
+
+- [ ] New order is returned with `confirmation: "pending"`
+- [ ] `GET /seller/orders?confirmation=pending` returns only unconfirmed orders
+- [ ] A pending order is absent from revenue and products sold, but still counted in Orders
+- [ ] `POST /seller/orders/:id/confirm` returns `confirmation: "confirmed"` and `confirmedAt`
+- [ ] Confirming twice is idempotent
+- [ ] A seller cannot confirm an order with no line item they own (404)
+- [ ] Orders are returned newest first
+
 ### Recommended Django Setup
 
 #### Project Structure
@@ -851,7 +921,7 @@ class Product(models.Model):
 See [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) for complete data models, including:
 - User & SellerProfile
 - Product & ProductVariant
-- Order & OrderItem
+- Order & OrderItem (including seller `confirmation` / `confirmed_at`)
 - Payment & Transaction
 - Storefront
 
@@ -891,14 +961,20 @@ Use these test scenarios:
    - Upload product images
 
 3. **Orders**:
-   - Create order as buyer
+   - Create order as buyer (returns `confirmation: "pending"`)
    - List orders (buyer view)
    - List seller orders (analytics endpoint)
+   - List seller orders with `confirmation=pending`
+   - Confirm a seller order and verify `confirmation` / `confirmedAt`
+   - Confirm the same order twice (idempotent)
+   - Verify a pending order is excluded from the seller's revenue and products sold
 
 4. **Seller Features**:
    - Create/update seller profile
    - View sales analytics
    - Feature products in marketplace
+   - Read the notification bell and the full notifications feed
+   - Open `/seller/notifications` and confirm a new order request
 
 ---
 
@@ -936,7 +1012,8 @@ See **[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)** for the complete API spec
 | `/users/me/password` | PATCH | Yes | Change password |
 | `/orders` | GET | Yes | List buyer orders |
 | `/orders` | POST | Yes | Create order |
-| `/seller/orders` | GET | Yes | List seller orders (analytics) |
+| `/seller/orders` | GET | Yes | List seller orders (analytics; `confirmation=pending` for the bell) |
+| `/seller/orders/:id/confirm` | POST | Yes | Seller confirms an order (counts toward revenue) |
 | `/payments/initialize` | POST | Yes | Initialize payment |
 | `/payments/verify/:ref` | GET | Yes | Verify payment |
 | `/uploads/images` | POST | Yes | Upload image |

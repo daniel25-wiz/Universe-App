@@ -6,6 +6,12 @@
  * shows its empty state, and when the backend is unreachable it shows the
  * error — never invented numbers.
  *
+ * Orders awaiting the seller's confirmation are deliberately EXCLUDED from
+ * revenue and products sold (they still appear in the orders count and recent
+ * list with an "Awaiting confirmation" badge). Confirming them from the
+ * dashboard notification bell invalidates the `seller-orders` queries, so the
+ * figures update immediately.
+ *
  * Windows: the selected range (7d/30d/90d) is aggregated for the CURRENT
  * period and again for the immediately PREVIOUS period of the same length,
  * which is what the "vs last period" trends compare against. Orders are
@@ -13,7 +19,7 @@
  * through completely so the totals cover every order, not just page 1.
  */
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ordersApi } from '../api/services/orders';
 import { ApiError } from '../api/errors';
 import type { Order } from '../api/types';
@@ -96,16 +102,101 @@ export function useSellerOrders(span: { since: string; until: string }) {
   });
 }
 
+/** Page walk used by the notification bell (pending orders are always recent). */
+const PENDING_PAGE_SIZE = 100;
+const PENDING_MAX_PAGES = 5;
+
+/**
+ * Orders the signed-in seller still has to confirm. Drives the dashboard
+ * notification bell/dropdown; refreshes every 30s so a buyer's fresh order
+ * appears without a reload. Client-side filtering is a safety net for
+ * backends that don't yet support the `confirmation` query parameter.
+ */
+export function useSellerPendingOrders() {
+  const { data: user } = useCurrentUser();
+  return useQuery<Order[], ApiError>({
+    queryKey: ['seller-orders', 'pending-confirmation', user?.id ?? null],
+    enabled: user?.accountType === 'seller',
+    queryFn: async () => {
+      const all: Order[] = [];
+      for (let page = 1; page <= PENDING_MAX_PAGES; page += 1) {
+        const res = await ordersApi.getSellerOrders({
+          confirmation: 'pending',
+          page,
+          pageSize: PENDING_PAGE_SIZE,
+        });
+        all.push(...res.items);
+        if (res.items.length === 0) break;
+        const loaded = (page - 1) * PENDING_PAGE_SIZE + res.items.length;
+        if (loaded >= res.total) break;
+      }
+      return all.filter((order) => orderAwaitingConfirmation(order));
+    },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Page size for the full notifications feed on the "view all" page. */
+const FEED_PAGE_SIZE = 50;
+
+/**
+ * Recent order notifications for the "View all notifications" page.
+ *
+ * The bell only needs the orders still awaiting confirmation, but the full
+ * page also previews orders the seller has already handled (confirmed or
+ * cancelled). It loads the newest seller orders without a date window so the
+ * history is not tied to the Sales Analytics range. It shares the
+ * `seller-orders` query prefix, so confirming an order refreshes the feed and
+ * the dashboard figures together.
+ */
+export function useSellerNotificationFeed(pageSize = FEED_PAGE_SIZE) {
+  const { data: user } = useCurrentUser();
+  return useQuery<Order[], ApiError>({
+    queryKey: ['seller-orders', 'notification-feed', user?.id ?? null, pageSize],
+    enabled: user?.accountType === 'seller',
+    queryFn: async () => {
+      const res = await ordersApi.getSellerOrders({ page: 1, pageSize });
+      return res.items;
+    },
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Seller confirms a pending order. Invalidating the `seller-orders` prefix
+ * refreshes BOTH the pending notification list and the analytics windows, so
+ * revenue / products sold update the moment the seller confirms.
+ */
+export function useConfirmSellerOrder() {
+  const queryClient = useQueryClient();
+  return useMutation<Order, ApiError, string>({
+    mutationFn: (id) => ordersApi.confirmOrder(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['seller-orders'] });
+    },
+  });
+}
+
 /* ----------------------------- Metric math ------------------------------ */
+
+/** True when the seller still has to confirm that the order was made. */
+export function orderAwaitingConfirmation(order: Order): boolean {
+  return order.status !== 'cancelled' && order.confirmation === 'pending';
+}
 
 /**
  * Revenue one order contributes to THIS seller: the sum of the seller's own
- * line totals, excluding cancelled orders. Falls back to the backend-computed
- * order total only when the backend omitted line items (optional outside
- * /seller/orders) — never a locally recomputed guess.
+ * line totals, excluding cancelled orders AND orders the seller has not yet
+ * confirmed. Falls back to the backend-computed order total only when the
+ * backend omitted line items (optional outside /seller/orders) — never a
+ * locally recomputed guess.
  */
 export function orderSellerAmount(order: Order, sellerId?: string | null): number {
-  if (order.status === 'cancelled') return 0;
+  if (order.status === 'cancelled' || orderAwaitingConfirmation(order)) return 0;
   if (Array.isArray(order.items) && order.items.length > 0) {
     return order.items.reduce((sum, item) => {
       if (sellerId && item.sellerId && item.sellerId !== sellerId) return sum;
@@ -116,9 +207,12 @@ export function orderSellerAmount(order: Order, sellerId?: string | null): numbe
   return order.amount ?? 0;
 }
 
-/** Units of THIS seller's products inside one order (cancelled excluded). */
+/**
+ * Units of THIS seller's products inside one order. Cancelled orders and
+ * orders still awaiting the seller's confirmation contribute 0.
+ */
 export function orderSellerUnits(order: Order, sellerId?: string | null): number {
-  if (order.status === 'cancelled') return 0;
+  if (order.status === 'cancelled' || orderAwaitingConfirmation(order)) return 0;
   if (!Array.isArray(order.items)) return 0;
   return order.items.reduce((sum, item) => {
     if (sellerId && item.sellerId && item.sellerId !== sellerId) return sum;
@@ -147,6 +241,8 @@ export interface SellerSalesSummary {
   productsSold: number;
   /** Cancelled orders in the window (the contract's refund stand-in). */
   refunds: number;
+  /** Orders still waiting for the seller's confirmation (excluded above). */
+  pending: number;
   /** Newest-first orders (the view caps how many it displays). */
   recent: Order[];
   /** Revenue chart buckets, oldest → newest. */
@@ -224,6 +320,7 @@ export function computeSellerSales(
     orders: sorted.length,
     productsSold: sorted.reduce((sum, order) => sum + orderSellerUnits(order, sellerId), 0),
     refunds: sorted.filter((order) => order.status === 'cancelled').length,
+    pending: sorted.filter((order) => orderAwaitingConfirmation(order)).length,
     recent: sorted.slice(0, 5),
     series: buildSeries(sorted, options.range, sellerId, now),
     basis: sorted.length,

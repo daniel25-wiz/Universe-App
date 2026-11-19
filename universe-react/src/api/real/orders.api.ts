@@ -42,6 +42,22 @@ export function normalizeOrderItem(raw: unknown): OrderItem | null {
 }
 
 /**
+ * Normalize the seller-confirmation state. The backend may expose it as
+ * `confirmation` / `confirmationStatus`, a boolean `sellerConfirmed`, or a
+ * `confirmedAt` timestamp. An absent value means "legacy row, already
+ * confirmed" so existing revenue figures never drop to zero.
+ */
+function normalizeConfirmation(record: Record<string, unknown>): Order['confirmation'] {
+  const raw = (toText(record.confirmation) ?? toText(record.confirmationStatus) ?? toText(record.sellerConfirmation))
+    ?.toLowerCase();
+  if (raw === 'pending') return 'pending';
+  if (raw === 'confirmed') return 'confirmed';
+  if (record.sellerConfirmed === false) return 'pending';
+  if (record.sellerConfirmed === true) return 'confirmed';
+  return undefined;
+}
+
+/**
  * Normalize one order payload into the UI's `Order` shape.
  *
  * `status` is the backend's word only: an unrecognized status throws instead
@@ -66,6 +82,8 @@ export function normalizeOrder(raw: unknown): Order {
         .map((entry) => normalizeOrderItem(entry))
         .filter((entry): entry is OrderItem => entry !== null)
     : undefined;
+  const confirmation = normalizeConfirmation(record);
+  const confirmedAt = toText(record.confirmedAt) ?? null;
   return {
     id: toText(record.id) ?? toText(record.uuid) ?? '',
     reference: toText(record.reference) ?? toText(record.orderReference) ?? '',
@@ -74,6 +92,8 @@ export function normalizeOrder(raw: unknown): Order {
     amount: toNumber(record.amount) ?? toNumber(record.total),
     status: status as Order['status'],
     createdAt,
+    ...(confirmation ? { confirmation } : {}),
+    ...(confirmedAt ? { confirmedAt } : {}),
     ...(items ? { items } : {}),
   };
 }
@@ -86,6 +106,9 @@ function buildOrderQuery(page: number, pageSize: number, params: OrderQueryParam
   // Optional ISO window — server-side period filtering (docs/API_CONTRACT.md).
   if (params.since) sp.set('since', params.since);
   if (params.until) sp.set('until', params.until);
+  // Optional seller-confirmation filter (notification bell). Backends that
+  // don't recognize it simply ignore the extra query parameter.
+  if (params.confirmation) sp.set('confirmation', params.confirmation);
   return sp.toString();
 }
 
@@ -154,6 +177,26 @@ export class RealOrdersApi implements OrdersApi {
       // pretends an order was created without the backend saying so.
       throw new ApiError({
         message: 'The server did not confirm the order. Check your order history before retrying.',
+        status: 0,
+        code: 'UNKNOWN_ERROR',
+      });
+    }
+    return order;
+  }
+
+  /**
+   * Seller confirmation of a pending order. The backend is the single source
+   * of truth: the order only starts counting toward revenue after this call
+   * returns successfully (docs/API_CONTRACT.md -> Orders).
+   */
+  async confirmOrder(id: string): Promise<Order> {
+    const raw = await httpClient.post<unknown>(
+      `/seller/orders/${encodeURIComponent(id)}/confirm`,
+    );
+    const order = normalizeOrder(unwrapEnvelope(raw, ORDER_ENVELOPE));
+    if (!order.id) {
+      throw new ApiError({
+        message: 'The server did not confirm the order. Please try again.',
         status: 0,
         code: 'UNKNOWN_ERROR',
       });

@@ -391,6 +391,24 @@ export interface PaginatedResponse<T> {
 export type OrderStatus = 'pending' | 'paid' | 'fulfilled' | 'cancelled';
 
 /**
+ * Seller-confirmation state of an order.
+ *
+ * A buyer placing an order does NOT immediately create revenue: the order is
+ * `pending` until the seller confirms it was actually made. Only `confirmed`
+ * orders count toward revenue / products sold in Sales Analytics.
+ *
+ * Legacy orders (rows created before this feature) may omit the field; an
+ * absent value is treated as already confirmed so existing figures stay
+ * correct.
+ */
+export type OrderConfirmationStatus = 'pending' | 'confirmed';
+
+/** True when an order still needs the seller to confirm it was made. */
+export function isOrderAwaitingConfirmation(order: Pick<Order, 'confirmation' | 'status'>): boolean {
+  return order.status !== 'cancelled' && order.confirmation === 'pending';
+}
+
+/**
  * One line item inside an order, as reported by the backend. `unitPrice` is
  * the price actually charged per unit (sale price when on sale) and
  * `lineTotal` is `quantity * unitPrice` — both BACKEND-computed. `sellerId`
@@ -417,6 +435,14 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   /**
+   * Seller confirmation state. `pending` = the seller has not yet confirmed
+   * the order was actually made, so it is EXCLUDED from revenue / products
+   * sold. Absent on legacy orders and treated as already `confirmed`.
+   */
+  confirmation?: OrderConfirmationStatus;
+  /** ISO timestamp of the seller's confirmation, when the backend reports it. */
+  confirmedAt?: string | null;
+  /**
    * Line items, when the backend includes them (required on /seller/orders,
    * optional elsewhere). Seller analytics are computed from these — the UI
    * never invents figures when they are missing.
@@ -433,6 +459,12 @@ export interface OrderQueryParams {
    */
   since?: string;
   until?: string;
+  /**
+   * Optional seller-confirmation filter. /seller/orders accepts
+   * `confirmation=pending` to return only orders waiting for the seller to
+   * confirm them (used by the dashboard notification bell).
+   */
+  confirmation?: OrderConfirmationStatus;
 }
 
 /* -------------------------------- Misc --------------------------------- */

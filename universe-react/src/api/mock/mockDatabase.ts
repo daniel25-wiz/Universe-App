@@ -9,10 +9,10 @@
 import type { Order, Product, SellerProfile, User } from '../types';
 import { seedDatabase } from './seed';
 
-// v4: orders now carry line `items` (productId/productName/quantity/
-// unitPrice/lineTotal/sellerId) — old v3 rows had no items, so seller
-// analytics could not attribute revenue; v3 data is reseeded.
-export const MOCK_DB_KEY = 'universe.mockdb.v4';
+// v5: orders carry a `confirmation` state ("pending" until the seller
+// confirms the order was actually made). v4 rows lack it and would all read
+// as confirmed, so v4 data is reseeded to include the demo pending order.
+export const MOCK_DB_KEY = 'universe.mockdb.v5';
 
 /**
  * A mock "server-side" session record.

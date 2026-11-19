@@ -192,6 +192,53 @@
   color: var(--gs-on-surface);
   flex-shrink: 0;
 }
+.sa-order-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.sa-order-pending {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--gs-r-full);
+  background: var(--gs-primary-fixed);
+  color: var(--gs-primary);
+  font-family: var(--gs-font-label);
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Notice above the stats: pending orders are not counted yet. */
+.sa-confirm-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: var(--gs-stack-lg);
+  padding: 12px 16px;
+  border: 1px solid var(--gs-primary-fixed-dim);
+  border-radius: var(--gs-r-xl);
+  background: var(--gs-primary-fixed);
+  color: var(--gs-on-surface);
+}
+.sa-confirm-note .material-symbols-outlined {
+  font-size: 20px;
+  color: var(--gs-primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.sa-confirm-note p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--gs-on-surface-variant);
+}
+.sa-confirm-note strong { color: var(--gs-primary); }
 
 /* Refresh control in the header toolbar (auto + manual refresh) */
 .sa-refresh {

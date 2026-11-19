@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import Sidebar from '../Sidebar';
+import SellerNotifications from '../ui/SellerNotifications';
 import '../seller-dashboard.css';
 import './sales-analytics.css';
 import { useCurrentUser } from '../../../hooks/useAuth';
-import { RANGE_LABELS, orderSellerAmount, useSellerSales } from '../../../hooks/useSellerAnalytics';
+import {
+  RANGE_LABELS,
+  orderAwaitingConfirmation,
+  orderSellerAmount,
+  useSellerSales,
+} from '../../../hooks/useSellerAnalytics';
 import { formatMoney, getUserInitials, timeAgo } from '../../../lib/user';
 import MaterialIcon from '../../../components/ui/MaterialIcon';
 
@@ -93,6 +99,7 @@ function SalesAnalytics() {
             </div>
           </div>
           <div className="sd-topbar-actions">
+            <SellerNotifications variant="standard" />
             <button className="sd-icon-btn" aria-label="Account">
               <MaterialIcon name="account_circle" />
             </button>
@@ -156,6 +163,18 @@ function SalesAnalytics() {
                 ))}
               </div>
 
+              {summary.pending > 0 && (
+                <div className="sa-confirm-note" role="status">
+                  <MaterialIcon name="notifications" />
+                  <p>
+                    <strong>{summary.pending}</strong>
+                    {' '}order{summary.pending === 1 ? '' : 's'} awaiting your confirmation.
+                    They will be added to revenue and products sold once you confirm them
+                    with the bell above.
+                  </p>
+                </div>
+              )}
+
               <div className="sa-grid">
                 {/* Revenue chart — real revenue buckets from real orders */}
                 <div className="sa-panel">
@@ -188,7 +207,11 @@ function SalesAnalytics() {
                           ))}
                         </div>
                         <p className="sa-note">
-                          Figures from {summary.basis} order{summary.basis === 1 ? '' : 's'} in this period · auto-refreshes every minute
+                          Figures from {summary.basis} order{summary.basis === 1 ? '' : 's'} in this period
+                          {summary.pending > 0
+                            ? ` · ${summary.pending} awaiting confirmation (excluded)`
+                            : ''}
+                          {' · '}auto-refreshes every minute
                         </p>
                       </>
                     )}
@@ -208,18 +231,24 @@ function SalesAnalytics() {
                       </div>
                     ) : (
                       <div className="sa-orders">
-                        {summary.recent.map((order) => (
-                          <div key={order.id} className="sa-order">
-                            <div className="sa-order-info">
-                              <div className="sa-order-avatar">{order.buyerInitials || getUserInitials(order.buyerName)}</div>
-                              <div>
-                                <div className="sa-order-name">{order.buyerName || 'Customer'}</div>
-                                <div className="sa-order-sub">{order.reference ? `#${order.reference} · ` : ''}{timeAgo(order.createdAt)}</div>
+                        {summary.recent.map((order) => {
+                          const pending = orderAwaitingConfirmation(order);
+                          return (
+                            <div key={order.id} className="sa-order">
+                              <div className="sa-order-info">
+                                <div className="sa-order-avatar">{order.buyerInitials || getUserInitials(order.buyerName)}</div>
+                                <div>
+                                  <div className="sa-order-name">{order.buyerName || 'Customer'}</div>
+                                  <div className="sa-order-sub">{order.reference ? `#${order.reference} · ` : ''}{timeAgo(order.createdAt)}</div>
+                                </div>
+                              </div>
+                              <div className="sa-order-right">
+                                <div className="sa-order-amount">{formatMoney(orderSellerAmount(order, user?.id))}</div>
+                                {pending && <span className="sa-order-pending">Awaiting confirmation</span>}
                               </div>
                             </div>
-                            <div className="sa-order-amount">{formatMoney(orderSellerAmount(order, user?.id))}</div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

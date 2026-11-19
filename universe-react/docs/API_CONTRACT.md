@@ -478,6 +478,34 @@ interface Product {
   featuredInMarketplace?: boolean | null;
   rating: number; reviews: number; createdAt: string; updatedAt: string;
 }
+
+interface OrderItem {
+  productId: string; productName: string; quantity: number;
+  /** Price actually charged per unit (the sale price when on sale). */
+  unitPrice: number | null;
+  /** quantity × unitPrice — BACKEND-computed. */
+  lineTotal: number | null;
+  /** Attributes the line to the seller that owns the product. */
+  sellerId?: string | null;
+}
+
+interface Order {
+  id: string; reference: string; buyerName: string; buyerInitials?: string;
+  amount: number | null;
+  status: "pending" | "paid" | "fulfilled" | "cancelled";
+  createdAt: string;
+  /**
+   * Seller-confirmation state. `pending` = the seller has not yet confirmed the
+   * order was actually made, so the order is EXCLUDED from revenue and products
+   * sold. Absent on legacy orders and treated as already `confirmed`.
+   * POST /seller/orders/:id/confirm sets it to `confirmed`.
+   */
+  confirmation?: "pending" | "confirmed";
+  /** ISO timestamp set when the seller confirms (when the backend reports it). */
+  confirmedAt?: string | null;
+  /** Line items; REQUIRED on /seller/orders, optional elsewhere. */
+  items?: OrderItem[];
+}
 ```
 
 ---
@@ -556,7 +584,9 @@ success.
 - **Authentication:** required.
 - **Body:** `{ items: [{ productId, quantity, variantSelection?, unitPrice? }], deliveryAddress, paymentReference?, note? }`.
 - **Response:** the authoritative created `Order`; a 2xx with no order is an
-  adapter error and is never treated as success.
+  adapter error and is never treated as success. A newly created order MUST
+  include `confirmation: "pending"` so it does not count toward seller revenue
+  until the seller confirms it.
 - **Pagination:** none.
 - **Status codes:** 201/200, 400/422 validation, 401, 403, 404, 409, 429, 500+.
 
@@ -566,17 +596,72 @@ success.
 - **Purpose:** the data source for Sales Analytics. Returns every order that
   contains at least one line item of a product owned by the authenticated
   seller, newest first.
-- **Parameters:** `page`, `pageSize`, and optional `since` / `until` (ISO 8601
-  timestamps bounding `createdAt`, inclusive).
+- **Parameters:** `page`, `pageSize`, optional `since` / `until` (ISO 8601
+  timestamps bounding `createdAt`, inclusive), and optional `confirmation`
+  (`pending` | `confirmed`) so the dashboard notification bell can request only
+  orders waiting for confirmation.
 - **Response:** the same list envelope as `GET /orders` (`{ items, total, page,
   pageSize }` or DRF `{ count, results }`). Every returned order MUST include
   its line items — `items: [{ productId, productName, quantity, unitPrice,
   lineTotal, sellerId }]` — where `unitPrice`/`lineTotal` are the amounts
   actually charged and `sellerId` attributes the line to the seller that owns
-  the product, so multi-seller orders stay attributable per line.
+  the product, so multi-seller orders stay attributable per line. Each order
+  also carries its confirmation state: `confirmation: "pending" | "confirmed"`
+  and optional `confirmedAt`. An absent `confirmation` means a legacy order and
+  is treated as confirmed by the frontend.
 - **Pagination:** server-side; the frontend pages through until `total` is
   covered.
 - **Status codes:** 200, 401, 403, 429, 500+.
+- **Notification feed usage:** the dashboard reads this endpoint in two ways.
+  The bell polls `?confirmation=pending&page=1&pageSize=50` for orders still
+  awaiting confirmation; the `/seller/notifications` page requests
+  `?page=1&pageSize=50` with **no** `since`/`until` window so it can list both
+  new requests and previous (confirmed or cancelled) orders. Both depend on
+  `reference`, `buyerName` and `items` being present, and on results being
+  newest first (`createdAt DESC`).
+
+### POST `/seller/orders/:id/confirm`
+
+- **Authentication:** required; seller accounts only.
+- **Purpose:** the seller confirms that the order was actually made. The order
+  only starts counting toward revenue and products sold after this endpoint
+  returns success.
+- **Parameters:** path `id` (order id).
+- **Response:** the updated `Order`, with `confirmation: "confirmed"` and
+  `confirmedAt` set. Confirming an already-confirmed order is idempotent.
+- **Authorization:** 404 when the order does not exist or contains no line item
+  owned by the signed-in seller (same anti-enumeration stance as `/orders/:id`).
+- **Pagination:** none.
+- **Status codes:** 200, 401, 403, 404, 409, 429, 500+.
+
+Until `confirmation: "confirmed"` is set, the frontend excludes the order from
+Sales Analytics' revenue, products sold and revenue chart. The pending count is
+surfaced in the dashboard notification bell and on the Sales Analytics page;
+pending orders still appear in the Orders count and the recent-orders list with
+an "Awaiting confirmation" badge.
+
+**Notifications UI (frontend behaviour, no extra endpoints):**
+
+- **Bell dropdown (all seller dashboard pages)** — polls
+  `GET /seller/orders?confirmation=pending&page=1&pageSize=50` and previews one
+  pending order at a time: product name(s), buyer, item count, value, reference
+  and elapsed time. When more than one order is pending it shows **previous /
+  next arrow** buttons with a "1 of M" counter, and each preview offers
+  **Confirm order** (`POST /seller/orders/:id/confirm`). The dropdown footer
+  links to the full notifications page and to Sales Analytics. A newly arriving
+  pending order raises the bell badge and opens the dropdown.
+- **`/seller/notifications` page** — reached from "View all notifications" in
+  the dropdown footer. It reads `GET /seller/orders?page=1&pageSize=50` with no
+  date window and splits the result into **New order requests**
+  (`confirmation: "pending"`) and **Previous orders** (confirmed or cancelled),
+  with status pills, inline confirm buttons and a client-side search over
+  product names, buyer and reference.
+
+Both views share one TanStack Query key prefix (`seller-orders`), so a
+confirmation immediately removes the order from the bell and moves it from
+"New" to "Previous" on the page while refreshing the analytics figures. No
+separate notifications endpoint, unread counter or websocket channel is
+required by the frontend.
 
 Sales Analytics computes its figures client-side from this endpoint — revenue,
 orders, units sold, refunds and the revenue chart are aggregated over the

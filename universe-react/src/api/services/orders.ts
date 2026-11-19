@@ -28,6 +28,12 @@ export interface OrdersApi {
   /** Retrieve one order by id (404 when it does not exist / is not yours). */
   getOrder(id: string): Promise<Order>;
   /**
+   * Seller confirms that a pending order was actually made. Until this call
+   * succeeds the order is excluded from revenue / products sold. Returns the
+   * updated order as the backend reports it.
+   */
+  confirmOrder(id: string): Promise<Order>;
+  /**
    * Create an order. The backend validates the payment reference, recomputes
    * totals from its own catalog prices, and assigns the initial order status.
    * The frontend never reports an order as created unless the backend said so.

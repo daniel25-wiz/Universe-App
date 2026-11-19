@@ -7,9 +7,11 @@ import { FEEDBACK_WHATSAPP_URL, SUPPORT_EMAIL } from '../../../lib/support';
 import { useCurrentUser, useLogout } from '../../../hooks/useAuth';
 import { useSellerProfile } from '../../../hooks/useUser';
 import { useProducts } from '../../../hooks/useProducts';
+import { useSellerPendingOrders } from '../../../hooks/useSellerAnalytics';
 import '../ui/widgets.css';
 import { getUserInitials, getFirstName, getStoreDisplayName, timeAgo, formatMoney } from '../../../lib/user';
 import MaterialIcon from '../../../components/ui/MaterialIcon';
+import SellerNotifications from '../ui/SellerNotifications';
 
 const NAV = [
   { key: 'home', label: 'Home', icon: 'home', to: '/seller', fill: true },
@@ -36,6 +38,7 @@ function DashboardOverview() {
 
   const { data: user } = useCurrentUser();
   const { data: profile } = useSellerProfile();
+  const { data: pendingOrders } = useSellerPendingOrders();
   const logout = useLogout();
 
   // Own products only — the API scopes this server-side as well.
@@ -126,10 +129,33 @@ function DashboardOverview() {
     };
   }, [products]);
 
-  // Recent activity from real data: newest products + low-stock warnings.
+  // Recent activity from real data: pending order confirmations first, then
+  // low-stock warnings and the newest products.
   const activity = useMemo(() => {
     const items = [];
+    (pendingOrders ?? []).slice(0, 2).forEach((order) => {
+      const lines = Array.isArray(order.items) ? order.items : [];
+      const own = sellerId ? lines.filter((line) => !line.sellerId || line.sellerId === sellerId) : lines;
+      const names = own.map((line) => line.productName).filter(Boolean);
+      const label = names.length === 0
+        ? 'your product'
+        : names.length === 1
+          ? `"${names[0]}"`
+          : `"${names[0]}" and ${names.length - 1} more`;
+      items.push({
+        key: `pending-${order.id}`,
+        icon: 'notifications',
+        cls: 'dh-ai-secondary',
+        text: (
+          <>
+            Confirmation needed: <strong>{label}</strong> was ordered
+          </>
+        ),
+        time: 'Awaiting your confirmation',
+      });
+    });
     stats.lowStock.slice(0, 2).forEach((p) => {
+      if (items.length >= 4) return;
       items.push({
         key: `low-${p.id}`,
         icon: 'warning',
@@ -144,7 +170,7 @@ function DashboardOverview() {
     });
     [...stats.list]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 4 - Math.min(2, items.length))
+      .slice(0, Math.max(0, 4 - items.length))
       .forEach((p) => {
         items.push({
           key: `prod-${p.id}`,
@@ -159,7 +185,7 @@ function DashboardOverview() {
         });
       });
     return items;
-  }, [stats]);
+  }, [stats, pendingOrders, sellerId]);
 
   const sidebarContent = (
     <>
@@ -265,6 +291,7 @@ function DashboardOverview() {
 
           {/* Trailing Actions */}
           <div className="dh-trailing">
+            <SellerNotifications variant="overview" autoOpen />
             <div className="dh-usermenu-wrap" ref={userMenuRef}>
               <button
                 type="button"

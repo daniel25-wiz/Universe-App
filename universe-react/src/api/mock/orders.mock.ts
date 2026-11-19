@@ -6,9 +6,11 @@
  *
  * Behavior:
  * - createOrder validates the payload the same way the contract requires the
- *   real backend to (non-empty items, quantities >= 1, delivery address
- *   fields) and, when a paymentReference is supplied, requires a payment the
- *   mock payments API has verified in this browser.
+ *   real backend to (non-empty items, quantities >= 1, delivery information)
+ *   and, when a paymentReference is supplied, requires a payment the mock
+ *   payments API has verified in this browser.
+ * - A new order starts in `confirmation: 'pending'`: the seller must confirm
+ *   it from the dashboard before it counts toward revenue / products sold.
  * - Orders are scoped to the signed-in buyer; other users never see them.
  * - getOrders/getOrder paginate over the buyer's own orders (newest first).
  */
@@ -81,6 +83,11 @@ export class MockOrdersApi implements OrdersApi {
           if (!Array.isArray(order.items) || !order.items.some((item) => item.sellerId === user.id)) {
             return false;
           }
+          // Optional notification filter: only orders still awaiting the
+          // seller's confirmation. A missing field counts as confirmed.
+          if (params.confirmation && (order.confirmation ?? 'confirmed') !== params.confirmation) {
+            return false;
+          }
           const created = new Date(order.createdAt).getTime();
           if (Number.isNaN(created)) return false;
           if (since != null && created < since) return false;
@@ -122,14 +129,20 @@ export class MockOrdersApi implements OrdersApi {
       if (!Array.isArray(data.items) || data.items.length === 0) {
         errors.items = 'Add at least one item before placing the order';
       }
-      const delivery = data.deliveryAddress;
-      if (!delivery || typeof delivery !== 'object') {
+      // The contract models delivery as an object, but the live checkout flow
+      // currently sends a plain string (the real backend's `delivery_address`
+      // CharField). Accept both so mock checkout behaves like production.
+      const delivery = data.deliveryAddress as unknown;
+      if (typeof delivery === 'string') {
+        if (!delivery.trim()) errors.deliveryAddress = 'Delivery information is required';
+      } else if (!delivery || typeof delivery !== 'object') {
         errors.deliveryAddress = 'Delivery information is required';
       } else {
-        if (!delivery.fullName?.trim()) errors['deliveryAddress.fullName'] = 'Full name is required';
-        if (!delivery.phone?.trim()) errors['deliveryAddress.phone'] = 'Phone number is required';
-        if (!delivery.addressLine1?.trim()) errors['deliveryAddress.addressLine1'] = 'Address is required';
-        if (!delivery.city?.trim()) errors['deliveryAddress.city'] = 'City is required';
+        const address = delivery as Record<string, unknown>;
+        if (!String(address.fullName ?? '').trim()) errors['deliveryAddress.fullName'] = 'Full name is required';
+        if (!String(address.phone ?? '').trim()) errors['deliveryAddress.phone'] = 'Phone number is required';
+        if (!String(address.addressLine1 ?? '').trim()) errors['deliveryAddress.addressLine1'] = 'Address is required';
+        if (!String(address.city ?? '').trim()) errors['deliveryAddress.city'] = 'City is required';
       }
       if (Object.keys(errors).length > 0) failField(errors);
 
@@ -193,10 +206,49 @@ export class MockOrdersApi implements OrdersApi {
         // Fresh orders always start as "processing" — the backend owns any
         // later transitions.
         status: 'processing',
+        // The buyer's click does NOT count as revenue yet: the seller must
+        // confirm the order was actually made from the dashboard first.
+        confirmation: 'pending',
+        confirmedAt: null,
         createdAt: timestamp,
         items,
       };
       return mockDb.insert('orders', order as never);
+    })());
+  }
+
+  /**
+   * Seller-side confirmation: marks a pending order as really made. Only the
+   * seller that owns at least one line item may confirm it; other sellers and
+   * buyers get a 404 exactly like a non-existent order. Confirming twice is
+   * idempotent. Once confirmed, the order starts counting toward revenue and
+   * products sold in Sales Analytics.
+   */
+  async confirmOrder(id: string): Promise<Order> {
+    logApi('POST', `/seller/orders/${id}/confirm`);
+    return withMockLatency((async () => {
+      const { user } = await requireSession();
+      if (user.accountType !== 'seller') {
+        throw new ApiError({
+          message: 'Only seller accounts can confirm orders.',
+          status: 403,
+          code: 'FORBIDDEN',
+        });
+      }
+      const order = mockDb.findById('orders', id) as StoredOrder | null;
+      if (
+        !order ||
+        !Array.isArray(order.items) ||
+        !order.items.some((item) => item.sellerId === user.id)
+      ) {
+        // Same anti-enumeration stance as getOrder: hide other sellers' rows.
+        throw new ApiError({ message: 'Order not found.', status: 404, code: 'NOT_FOUND' });
+      }
+      if ((order.confirmation ?? 'confirmed') === 'confirmed') return order;
+      return (mockDb.update('orders', id, {
+        confirmation: 'confirmed',
+        confirmedAt: nowIso(),
+      }) as Order) ?? order;
     })());
   }
 }
