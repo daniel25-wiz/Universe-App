@@ -633,6 +633,10 @@ success.
   owned by the signed-in seller (same anti-enumeration stance as `/orders/:id`).
 - **Pagination:** none.
 - **Status codes:** 200, 401, 403, 404, 409, 429, 500+.
+- **Side effects:** if the backend keeps a denormalized product "sold" counter,
+  increment it on the `pending` → `confirmed` transition, never at checkout, so
+  a pending order does not appear sold on public product listings. Stock is
+  still reserved when the order is created.
 
 Until `confirmation: "confirmed"` is set, the frontend excludes the order from
 Sales Analytics' revenue, products sold and revenue chart. The pending count is

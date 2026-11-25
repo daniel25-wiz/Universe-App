@@ -1,7 +1,11 @@
 import uuid
+from datetime import timezone as dt_timezone
 
 from django.db import transaction
-from rest_framework.generics import ListAPIView, RetrieveAPIView
+from django.db.models import F
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from rest_framework.generics import RetrieveAPIView
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -14,6 +18,27 @@ from products.models import Product
 
 from .models import Order, OrderItem
 from .serializers import CreateOrderSerializer, OrderSerializer
+
+
+def _parse_iso_bound(value, field):
+    """Parse an ISO 8601 `since`/`until` query bound, or raise a 422.
+
+    Naive timestamps (no offset) are treated as UTC so the comparison against
+    the stored, timezone-aware `created_at` is always valid.
+    """
+    if not value:
+        return None
+    parsed = parse_datetime(value)
+    if parsed is None:
+        raise ApiError(
+            f"'{field}' must be an ISO 8601 timestamp.",
+            code="VALIDATION_ERROR",
+            status_code=422,
+            field_errors={field: "Use an ISO 8601 timestamp (e.g. 2024-02-15T10:30:00Z)."},
+        )
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, dt_timezone.utc)
+    return parsed
 
 
 class OrderListCreateView(APIView):
@@ -87,9 +112,10 @@ class OrderListCreateView(APIView):
                     id=uuid.uuid4(), order=order, product=product, seller_id=product.seller_id,
                     product_name=product.name, quantity=qty, unit_price=unit_price, line_total=line_total,
                 )
+                # Stock is reserved immediately, but `sold_count` only moves at
+                # confirmation: a pending order must not count as sold yet.
                 product.stock -= qty
-                product.sold_count += qty
-                product.save(update_fields=["stock", "sold_count"])
+                product.save(update_fields=["stock"])
 
             if payment_txn:
                 payment_txn.order = order
@@ -112,6 +138,68 @@ class SellerOrdersView(APIView):
         """Orders that include at least one item sold by this seller."""
         order_ids = OrderItem.objects.filter(seller=request.user).values_list("order_id", flat=True).distinct()
         qs = Order.objects.filter(id__in=order_ids).prefetch_related("items")
+
+        # Notification bell: only orders still awaiting the seller's confirmation.
+        confirmation = request.query_params.get("confirmation")
+        if confirmation:
+            if confirmation not in {"pending", "confirmed"}:
+                raise ApiError(
+                    "'confirmation' must be either 'pending' or 'confirmed'.",
+                    code="VALIDATION_ERROR",
+                    status_code=422,
+                    field_errors={"confirmation": "Use 'pending' or 'confirmed'."},
+                )
+            qs = qs.filter(confirmation=confirmation)
+
+        # Sales Analytics windows (inclusive) so the client does not download
+        # the seller's entire order history.
+        since = _parse_iso_bound(request.query_params.get("since"), "since")
+        until = _parse_iso_bound(request.query_params.get("until"), "until")
+        if since is not None:
+            qs = qs.filter(created_at__gte=since)
+        if until is not None:
+            qs = qs.filter(created_at__lte=until)
+
         page = ItemsPagination()
         page_qs = page.paginate_queryset(qs, request)
         return page.get_paginated_response(OrderSerializer(page_qs, many=True).data)
+
+
+class SellerOrderConfirmView(APIView):
+    """Seller confirms an order was actually made.
+
+    Only a seller with at least one line item on the order may confirm it;
+    everyone else (including buyers and other sellers) gets a 404, matching the
+    anti-enumeration stance of the rest of the orders API. Confirming twice is
+    idempotent. The order starts counting toward revenue and products sold only
+    once this succeeds.
+    """
+
+    permission_classes = [IsSeller]
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            order = (
+                Order.objects.select_for_update()
+                .prefetch_related("items")
+                .filter(pk=pk)
+                .first()
+            )
+            if order is None or not any(
+                item.seller_id == request.user.id for item in order.items.all()
+            ):
+                raise ApiError("Order not found.", code="NOT_FOUND", status_code=404)
+
+            if order.confirmation != "confirmed":
+                order.confirmation = "confirmed"
+                order.confirmed_at = timezone.now()
+                order.save(update_fields=["confirmation", "confirmed_at", "updated_at"])
+                # The denormalized "sold" counter moves here, not at checkout,
+                # so pending orders never look sold on public product listings.
+                for item in order.items.all():
+                    if item.product_id:
+                        Product.objects.filter(pk=item.product_id).update(
+                            sold_count=F("sold_count") + item.quantity
+                        )
+
+        return Response(OrderSerializer(order).data)

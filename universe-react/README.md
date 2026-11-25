@@ -734,6 +734,9 @@ against two endpoints only (see [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
   `confirmedAt`, and returns the updated order. It is idempotent (confirming an
   already-confirmed order returns 200) and returns 404 when the order has no
   line item owned by the signed-in seller.
+- If you keep a denormalized product "sold" counter, increment it on the
+  `pending` → `confirmed` transition (not at checkout); stock is still reserved
+  when the order is created.
 - Pending orders still count in the Orders total and the recent-orders list;
   only revenue, products sold, the revenue chart and refunds exclude them.
 

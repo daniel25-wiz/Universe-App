@@ -34,11 +34,30 @@ To use PostgreSQL instead, set `DATABASE_URL` in `.env`, e.g.
 |---|---|
 | `accounts` | User model (buyer/seller), JWT auth, Google sign-in, password reset by email OTP, seller profile |
 | `products` | Product CRUD, the 2-featured / 20-total seller limits |
-| `orders` | Order creation — recomputes totals from the DB, checks stock, verifies `payment_reference` |
+| `orders` | Order creation — recomputes totals from the DB, checks stock, verifies `payment_reference`; seller order list with `confirmation` / `since` / `until` filters; seller order confirmation |
 | `payments` | Paystack `initialize` / `verify` |
 | `storefront` | Public `GET /storefront/{slug}` page |
 | `uploads` | `POST /uploads/images` (multipart) |
 | `core` | Shared error formatting, pagination shape, permissions |
+
+### Order confirmation
+
+A buyer order does not count toward the seller's revenue / products sold until
+the seller confirms it. The implementation matches `docs/API_CONTRACT.md`:
+
+- `Order.confirmation` is `"pending"` on creation (migration `orders.0002`).
+  Rows that existed before the migration are backfilled to `"confirmed"` so the
+  seller's historical figures do not disappear.
+- `GET /api/seller/orders` accepts `confirmation=pending|confirmed`,
+  `since` / `until` (ISO 8601) and the usual `page` / `page_size`.
+- `POST /api/seller/orders/{id}/confirm` sets `confirmation="confirmed"` and
+  `confirmed_at`, and is idempotent. It returns 404 when the order has no line
+  item owned by the signed-in seller and 403 for buyer accounts.
+- The denormalized `Product.sold_count` moves at confirmation, not at checkout;
+  stock is still reserved when the order is created.
+
+The dashboard reads the two GET forms directly: `confirmation=pending` for the
+bell and an unwindowed `page_size=50` list for `/seller/notifications`.
 
 ## 3. Notes and things to double-check against your frontend
 
@@ -70,3 +89,5 @@ To use PostgreSQL instead, set `DATABASE_URL` in `.env`, e.g.
 4. `GET /api/storefront/{slug}` (public, no auth)
 5. Register a second user as buyer → `POST /api/orders` with that product
 6. `POST /api/payments/initialize` → complete on Paystack test card → `GET /api/payments/verify/{reference}`
+7. As the seller: `GET /api/seller/orders?confirmation=pending` → `POST /api/seller/orders/{id}/confirm` → confirm the same order again (idempotent)
+8. As the buyer: `GET /api/orders` → the order shows `confirmation: "confirmed"`

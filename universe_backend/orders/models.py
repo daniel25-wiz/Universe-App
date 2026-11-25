@@ -9,6 +9,10 @@ class Order(models.Model):
         ("pending", "Pending payment"), ("paid", "Paid"),
         ("fulfilled", "Fulfilled"), ("cancelled", "Cancelled"),
     ]
+    CONFIRMATIONS = [
+        ("pending", "Pending confirmation"),
+        ("confirmed", "Confirmed"),
+    ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders")
@@ -19,6 +23,12 @@ class Order(models.Model):
     delivery_phone = models.CharField(max_length=30, blank=True, default="")
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(max_length=12, choices=STATUSES, default="pending")
+    # A buyer placing an order does NOT create revenue: the seller confirms the
+    # order was actually made before it counts toward revenue / products sold.
+    confirmation = models.CharField(
+        max_length=10, choices=CONFIRMATIONS, default="pending", db_index=True
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
     payment_reference = models.CharField(max_length=100, null=True, blank=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
