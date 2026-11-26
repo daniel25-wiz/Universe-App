@@ -102,6 +102,9 @@ function AddProductPage() {
 
   const [serverError, setServerError] = useState(null);
   const [imageError, setImageError] = useState(null);
+  // Inline errors for the four required fields (name, price, description,
+  // category). Everything else on this form is optional.
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Slot the NEXT file selection targets: `null` appends into the free slots,
   // a number replaces that image. Captured when the hidden input is opened.
@@ -132,6 +135,7 @@ function AddProductPage() {
     if (isSubmitting) return;
     setServerError(null);
     setImageError(null);
+    setFieldErrors({});
     setForm({
       name: '',
       sku: '',
@@ -165,7 +169,15 @@ function AddProductPage() {
   }, [form.images]);
 
   const handleChange = (e) => {
-    setForm((f) => ({ ...f, [e.target.id]: e.target.value }));
+    const { id, value } = e.target;
+    setForm((f) => ({ ...f, [id]: value }));
+    // Clear the inline error as soon as the seller edits that field.
+    setFieldErrors((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   };
 
   const toggleField = (field) => {
@@ -248,6 +260,32 @@ function AddProductPage() {
   const hasHalfFilledVariant = () => form.variants.some((variant) => (
     Boolean(variant.name.trim()) !== variant.values.some((value) => value.trim())
   ));
+
+  /**
+   * Only these four fields are compulsory. Variants, stock, images, discount,
+   * condition, length and the toggles are all optional.
+   */
+  const validateForm = () => {
+    const errors = {};
+
+    const name = form.name.trim();
+    if (!name) errors.name = 'Product name is required.';
+    else if (name.length > 120) errors.name = 'Product name must be 120 characters or fewer.';
+
+    const rawPrice = form.price.trim();
+    const price = Number.parseFloat(rawPrice);
+    if (!rawPrice) errors.price = 'Price is required.';
+    else if (!Number.isFinite(price) || price < 0) errors.price = 'Enter a valid price.';
+    else if (price > 10_000_000) errors.price = 'Price is too large.';
+
+    const description = form.description.trim();
+    if (!description) errors.description = 'Description is required.';
+    else if (description.length > 2000) errors.description = 'Description must be 2000 characters or fewer.';
+
+    if (!form.category) errors.category = 'Select a category.';
+
+    return errors;
+  };
 
   /* -------------------------------- Images -------------------------------- */
 
@@ -345,6 +383,15 @@ function AddProductPage() {
     e.preventDefault();
     setServerError(null);
 
+    // Required fields first: name, price, description and category.
+    const errors = validateForm();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      const firstInvalid = ['name', 'price', 'description', 'category'].find((field) => errors[field]);
+      if (firstInvalid) document.getElementById(firstInvalid)?.focus();
+      return;
+    }
+
     // Workshop product cap — block submission before hitting the API.
     if (!canAddProduct) {
       setServerError(`Your workshop is full — you can store up to ${WORKSHOP_PRODUCT_LIMIT} products. Remove one first.`);
@@ -375,18 +422,16 @@ function AddProductPage() {
         }
       }
 
-      const resolvedName = (form.name || form.category || 'New Product').trim() || 'New Product';
-      const resolvedPrice = Number.parseFloat(form.price || '0');
       const variants = collectVariants();
 
       await createProduct.mutateAsync({
-        name: resolvedName,
-        sku: form.sku || undefined,
-        description: form.description || undefined,
-        price: Number.isFinite(resolvedPrice) ? resolvedPrice : 0,
+        name: form.name.trim(),
+        sku: form.sku.trim() || undefined,
+        description: form.description.trim(),
+        price: Math.round(Number.parseFloat(form.price) * 100) / 100,
         salePrice: form.discount ? parseFloat(form.discount) : null,
         stock: form.stock ? parseInt(form.stock, 10) : null,
-        category: form.category || undefined,
+        category: form.category,
         // Delivery location is locked to the platform default hub — there is no
         // seller input for it on this page, and the public marketplace shows it.
         deliveryLocation: DEFAULT_DELIVERY_LOCATION,
@@ -406,7 +451,15 @@ function AddProductPage() {
     } catch (error) {
       // Failure: dismiss loading, show error, keep form data intact
       setIsSubmitting(false);
-      
+
+      // Surface per-field messages inline when the API returns them.
+      const serverFieldErrors = error?.fieldErrors ?? {};
+      const inlineErrors = {};
+      ['name', 'price', 'description', 'category'].forEach((field) => {
+        if (serverFieldErrors[field]) inlineErrors[field] = String(serverFieldErrors[field]);
+      });
+      if (Object.keys(inlineErrors).length > 0) setFieldErrors(inlineErrors);
+
       if (error?.fieldErrors && Object.keys(error.fieldErrors).length > 0) {
         setServerError(String(Object.values(error.fieldErrors)[0]));
       } else {
@@ -446,7 +499,7 @@ function AddProductPage() {
           </p>
         </header>
 
-        <form className="ap-form" id="ap-form" onSubmit={handleSubmit}>
+        <form className="ap-form" id="ap-form" onSubmit={handleSubmit} noValidate>
           {serverError && <div className="ap-error">{serverError}</div>}
           {!canAddProduct && (
             <div className="ap-error" role="alert">
@@ -456,7 +509,7 @@ function AddProductPage() {
 
           <section className="ap-section">
             <div className="ap-section-header">
-              <h2>Product Images</h2>
+              <h2>Product Images <span className="ap-optional">(Optional)</span></h2>
               <p>
                 Select up to {MAX_IMAGES} images of the product — the first image is the cover.
                 Use Replace on an image to swap it for another.
@@ -533,8 +586,8 @@ function AddProductPage() {
             />
           </section>
 
-          <label className="ap-field ap-field-full ap-product-name-field">
-            <span>Product Name</span>
+          <label className={`ap-field ap-field-full ap-product-name-field ${fieldErrors.name ? 'has-error' : ''}`}>
+            <span>Product Name <span className="ap-required" aria-hidden="true">*</span></span>
             <div className="ap-input-wrap ap-no-icon">
               <input
                 id="name"
@@ -543,31 +596,49 @@ function AddProductPage() {
                 value={form.name}
                 onChange={handleChange}
                 required
+                aria-invalid={Boolean(fieldErrors.name)}
+                aria-describedby={fieldErrors.name ? 'name-error' : undefined}
               />
             </div>
+            {fieldErrors.name && (
+              <small className="ap-field-error" id="name-error" role="alert">{fieldErrors.name}</small>
+            )}
           </label>
 
           <div className="ap-row ap-row-2">
-            <label className="ap-field">
-              <span>Price</span>
+            <label className={`ap-field ${fieldErrors.price ? 'has-error' : ''}`}>
+              <span>Price <span className="ap-required" aria-hidden="true">*</span></span>
               <div className="ap-input-wrap">
                 <span className="ap-prefix">₦</span>
-                <input id="price" type="number" placeholder="Enter price" value={form.price} onChange={handleChange} />
+                <input
+                  id="price"
+                  type="number"
+                  min="0"
+                  placeholder="Enter price"
+                  value={form.price}
+                  onChange={handleChange}
+                  required
+                  aria-invalid={Boolean(fieldErrors.price)}
+                  aria-describedby={fieldErrors.price ? 'price-error' : undefined}
+                />
               </div>
+              {fieldErrors.price && (
+                <small className="ap-field-error" id="price-error" role="alert">{fieldErrors.price}</small>
+              )}
             </label>
 
             <label className="ap-field">
-              <span>Discount Price (Optional)</span>
+              <span>Discount Price <span className="ap-optional">(Optional)</span></span>
               <div className="ap-input-wrap">
                 <span className="ap-prefix">₦</span>
-                <input id="discount" type="number" placeholder="Enter discount price" value={form.discount} onChange={handleChange} />
+                <input id="discount" type="number" min="0" placeholder="Enter discount price" value={form.discount} onChange={handleChange} />
               </div>
             </label>
           </div>
 
           <div className="ap-row ap-row-2">
             <label className="ap-field">
-              <span>Amount of Goods in Stock</span>
+              <span>Amount of Goods in Stock <span className="ap-optional">(Optional)</span></span>
               <div className="ap-input-wrap">
                 <MaterialIcon name="inventory_2" className="ap-loc-icon" />
                 <input
@@ -668,19 +739,25 @@ function AddProductPage() {
             </button>
           </div>
 
-          <label className="ap-field ap-field-full">
-            <span>Description</span>
+          <label className={`ap-field ap-field-full ${fieldErrors.description ? 'has-error' : ''}`}>
+            <span>Description <span className="ap-required" aria-hidden="true">*</span></span>
             <textarea
               id="description"
               rows="4"
               placeholder="Write a detailed description..."
               value={form.description}
               onChange={handleChange}
+              required
+              aria-invalid={Boolean(fieldErrors.description)}
+              aria-describedby={fieldErrors.description ? 'description-error' : undefined}
             />
+            {fieldErrors.description && (
+              <small className="ap-field-error" id="description-error" role="alert">{fieldErrors.description}</small>
+            )}
           </label>
 
           <label className="ap-field ap-field-full">
-            <span>Length of roll / Use</span>
+            <span>Length of roll / Use <span className="ap-optional">(Optional)</span></span>
             <div className="ap-input-wrap ap-no-icon">
               <input
                 id="length"
@@ -706,11 +783,18 @@ function AddProductPage() {
             <MaterialIcon name="lock" className="ap-lock-icon" />
           </div>
 
-          <label className="ap-field ap-field-full">
-            <span>Category</span>
+          <label className={`ap-field ap-field-full ${fieldErrors.category ? 'has-error' : ''}`}>
+            <span>Category <span className="ap-required" aria-hidden="true">*</span></span>
             <div className="ap-select-wrap">
               <MaterialIcon name="category" className="ap-category-icon" />
-              <select id="category" value={form.category} onChange={handleChange}>
+              <select
+                id="category"
+                value={form.category}
+                onChange={handleChange}
+                required
+                aria-invalid={Boolean(fieldErrors.category)}
+                aria-describedby={fieldErrors.category ? 'category-error' : undefined}
+              >
                 <option value="">Select category</option>
                 {CATEGORIES.map((category) => (
                   <option key={category} value={category}>{category}</option>
@@ -718,11 +802,14 @@ function AddProductPage() {
               </select>
               <MaterialIcon name="expand_more" className="ap-caret" />
             </div>
+            {fieldErrors.category && (
+              <small className="ap-field-error" id="category-error" role="alert">{fieldErrors.category}</small>
+            )}
           </label>
 
           <section className="ap-section ap-variants">
             <div className="ap-section-header">
-              <h2>Variants</h2>
+              <h2>Variants <span className="ap-optional">(Optional)</span></h2>
               <p>
                 Add options like size, colour or edition so buyers can pick the exact version they want.
                 Leave the name and value empty if the product comes in one version.
