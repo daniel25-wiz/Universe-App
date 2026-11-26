@@ -88,6 +88,45 @@ export function ProductCard({ product, saved, onToggleSaved, onOpen, onAddToCart
 }
 
 /**
+ * Loading placeholder for a product grid.
+ *
+ * Mirrors ProductCard's geometry (square art, title/rating row, location,
+ * two-line description, price and button) so real cards replace it without a
+ * layout jump. Renders 12 cards: the 4-column desktop grid shows them as three
+ * rows, while CSS hides the extra six on the 2-column mobile grid so it stays
+ * exactly three rows there too — tall enough to scroll through.
+ */
+export function ProductGridSkeleton() {
+  return (
+    <section
+      className="mm-product-grid mm-product-grid-skeleton"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading products"
+    >
+      <span className="mm-sr-only">Loading products…</span>
+      {Array.from({ length: 12 }, (_, index) => (
+        <article className="mm-product-card mm-skeleton-card" key={`skeleton-${index}`} aria-hidden="true">
+          <span className="mm-skeleton-heart" />
+          <div className="mm-product-art mm-skeleton-art" />
+          <div className="mm-product-meta">
+            <span className="mm-skeleton-line mm-skeleton-title" />
+            <span className="mm-skeleton-line mm-skeleton-rating" />
+          </div>
+          <span className="mm-skeleton-line mm-skeleton-location" />
+          <span className="mm-skeleton-line mm-skeleton-desc" />
+          <span className="mm-skeleton-line mm-skeleton-desc mm-skeleton-desc-short" />
+          <div className="mm-product-footer">
+            <span className="mm-skeleton-line mm-skeleton-price" />
+            <span className="mm-skeleton-line mm-skeleton-button" />
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+/**
  * Filled WhatsApp brand glyph for "Message seller" buttons.
  *
  * Defined once here and shared by every WhatsApp action (the product page's

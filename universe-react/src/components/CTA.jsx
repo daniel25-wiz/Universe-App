@@ -1,9 +1,12 @@
+import { useNavigate } from 'react-router-dom';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
+import { prefetchPropsForPath } from '../lib/prefetch';
 import Button from './ui/Button';
 import ArrowIcon from './ui/ArrowIcon';
 
 const CTA = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.15 });
+  const navigate = useNavigate();
 
   return (
     <section ref={ref} className={`cta-section reveal ${isVisible ? "active" : ""}`}>
@@ -13,7 +16,7 @@ const CTA = () => {
           <p className="cta-description">
             Join thousands of active entrepreneurs using Universe to build successful online businesses and reach global customers.
           </p>
-          <Button className="btn-primary" onClick={() => document.getElementById("marketplace").scrollIntoView()}>
+          <Button className="btn-primary" onClick={() => navigate('/auth/signup')} {...prefetchPropsForPath('/auth/signup')}>
             Get Started Now <ArrowIcon />
           </Button>
         </div>

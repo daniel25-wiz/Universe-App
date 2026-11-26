@@ -51,7 +51,7 @@ const Navbar = ({ cartCount }) => {
 
           <ul className="nav-menu">
             <li><Link to="/" className="nav-link active" {...prefetchPropsForPath('/')}>Home</Link></li>
-            <li><Link to="#marketplace" className="nav-link" onClick={handleSectionClick('#marketplace')}>Marketplace</Link></li>
+            <li><Link to="/marketplace" className="nav-link" {...prefetchPropsForPath('/marketplace')}>Marketplace</Link></li>
             <li><Link to="#features-showcase" className="nav-link" onClick={handleSectionClick('#features-showcase')}>Features</Link></li>
             <li><Link to="#dashboard" className="nav-link" onClick={handleSectionClick('#dashboard')}>Dashboard</Link></li>
             <li><Link to="#contact" className="nav-link" onClick={handleSectionClick('#contact')}>Contact</Link></li>
@@ -83,7 +83,7 @@ const Navbar = ({ cartCount }) => {
       <div className={`mobile-menu ${menuOpen ? "open" : ""}`}>
         <ul className="mobile-nav">
           <li><Link to="/" className="mobile-nav-link" onClick={toggleMenu} {...prefetchPropsForPath('/')}>Home</Link></li>
-          <li><Link to="#marketplace" className="mobile-nav-link" onClick={handleSectionClick('#marketplace')}>Marketplace</Link></li>
+          <li><Link to="/marketplace" className="mobile-nav-link" onClick={toggleMenu} {...prefetchPropsForPath('/marketplace')}>Marketplace</Link></li>
           <li><Link to="#features-showcase" className="mobile-nav-link" onClick={handleSectionClick('#features-showcase')}>Features</Link></li>
           <li><Link to="#dashboard" className="mobile-nav-link" onClick={handleSectionClick('#dashboard')}>Dashboard</Link></li>
           <li><Link to="#contact" className="mobile-nav-link" onClick={handleSectionClick('#contact')}>Contact</Link></li>

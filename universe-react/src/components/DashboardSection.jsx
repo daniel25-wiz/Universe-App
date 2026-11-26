@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
+import { prefetchPropsForPath } from '../lib/prefetch';
 import Button from './ui/Button';
 import ArrowIcon from './ui/ArrowIcon';
 import Counter from './ui/Counter';
 
 const DashboardSection = () => {
   const [ref, isVisible] = useIntersectionObserver({ threshold: 0.15 });
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("analytics");
   const [hoveredMetric, setHoveredMetric] = useState(null);
 
@@ -213,7 +216,7 @@ const DashboardSection = () => {
         </div>
 
         <div className="db-action-footer">
-          <Button className="btn-primary" onClick={() => document.getElementById("marketplace").scrollIntoView()}>
+          <Button className="btn-primary" onClick={() => navigate('/auth/signup')} {...prefetchPropsForPath('/auth/signup')}>
             Get Started Now <ArrowIcon />
           </Button>
         </div>

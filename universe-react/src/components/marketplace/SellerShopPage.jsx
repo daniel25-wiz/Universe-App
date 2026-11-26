@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useProducts } from '../../hooks/useProducts';
 import { useCurrentUser } from '../../hooks/useAuth';
-import { Icon, MobileFrame, ProductCard, ScreenHeader } from './MobileMarketplaceShell';
+import { Icon, MobileFrame, ProductCard, ProductGridSkeleton, ScreenHeader } from './MobileMarketplaceShell';
 
 /**
  * Seller shop — reached from the "View all products from this seller" button
@@ -45,7 +45,7 @@ function SellerShopPage({ savedProducts = [], onToggleSaved, onAddToCart }) {
           <small>You are viewing your own shop — all products can be edited there.</small>
         </section>
       )}
-      {isLoading ? <p className="mm-loading">Loading products...</p>
+      {isLoading ? <ProductGridSkeleton />
         : products.length ? (
           <section className="mm-product-grid">
             {products.map((product) => (

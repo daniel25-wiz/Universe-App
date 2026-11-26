@@ -142,6 +142,49 @@
    larger, without changing the 2-up/4-up column count. */
 .mm-product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-top: 2px; }
 .mm-loading { grid-column: 1 / -1; padding: 32px; color: #64748b; text-align: center; }
+
+/* Product-grid skeleton. The card chrome comes from .mm-product-card so the
+   silhouette matches the real listing exactly; only the inner blocks shimmer. */
+.mm-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.mm-product-grid-skeleton { pointer-events: none; }
+.mm-skeleton-card { overflow: hidden; }
+.mm-skeleton-heart { position: absolute; z-index: 2; top: 6px; right: 6px; width: 28px; height: 28px; overflow: hidden; border-radius: 50%; background: #eef2f7; }
+.mm-skeleton-line,
+.mm-skeleton-art,
+.mm-skeleton-button { position: relative; overflow: hidden; background: #eef2f7; }
+.mm-skeleton-line::after,
+.mm-skeleton-art::after,
+.mm-skeleton-heart::after,
+.mm-skeleton-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 60%), transparent);
+  animation: mm-skeleton-shimmer 1.25s ease-in-out infinite;
+}
+@keyframes mm-skeleton-shimmer { 100% { transform: translateX(100%); } }
+.mm-skeleton-art { border-radius: 16px; }
+.mm-skeleton-line { display: block; height: 10px; border-radius: 999px; }
+.mm-skeleton-title { width: 72%; height: 13px; }
+.mm-skeleton-rating { flex: 0 0 auto; width: 26%; }
+.mm-skeleton-location { width: 64%; margin: 0 0 6px; }
+.mm-skeleton-desc { width: 100%; margin: 0 0 5px; }
+.mm-skeleton-desc-short { width: 58%; }
+.mm-skeleton-price { width: 46%; height: 14px; margin-top: 2px; }
+.mm-skeleton-button { width: 100%; height: 32px; border-radius: 999px; }
+/* 2 columns × 6 cards = 3 rows on mobile; all 12 fill 3 rows on desktop.
+   nth-of-type (not nth-child) ignores the visually-hidden status label. */
+.mm-product-grid-skeleton > .mm-skeleton-card:nth-of-type(n + 7) { display: none; }
+@media (min-width: 700px) {
+  .mm-product-grid-skeleton > .mm-skeleton-card:nth-of-type(n + 7) { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mm-skeleton-line::after,
+  .mm-skeleton-art::after,
+  .mm-skeleton-heart::after,
+  .mm-skeleton-button::after { animation: none; }
+}
 /* "Load more" control — appends the next server page so listings past the
    first page stay reachable instead of being silently dropped. */
 .mm-load-more { display: grid; justify-items: center; padding: 16px 0 4px; }
